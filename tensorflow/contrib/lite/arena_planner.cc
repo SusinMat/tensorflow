@@ -128,6 +128,12 @@ TfLiteStatus ArenaPlanner::PlanAllocations() {
       TF_LITE_ENSURE_STATUS(allocate(0, tensor_index));
     }
   }
+  #if 0
+  // We also must make sure the input tensors are never overwritten.
+  for (int tensor_index : graph_info_->inputs()) {
+    refcounts[tensor_index]++;
+  }
+  #endif
 
   // Count references to node input tensors.
   for (int i = 0; i < graph_info_->num_nodes(); ++i) {

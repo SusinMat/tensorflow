@@ -330,6 +330,16 @@ class Interpreter {
   // Returns status of success or failure.
   TfLiteStatus Invoke();
 
+  // Invoke the interpreter (run the whole graph in dependency order).
+  // Record the execution time for each kernel and print this in
+  // the profiler_file_name file.
+  //
+  // NOTE: It is possible that the interpreter is not in a ready state
+  // to evaluate (i.e. if a ResizeTensor() has been performed without an
+  // AllocateTensors().
+  // Returns status of success or failure.
+  TfLiteStatus Invoke(const std::string profiler_file_name);
+
   // Enable or disable the NN API (true to enable)
   void UseNNAPI(bool enable);
 

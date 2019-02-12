@@ -31,6 +31,9 @@ limitations under the License.
 #include "tensorflow/contrib/lite/schema/schema_generated.h"
 #include "tensorflow/contrib/lite/util.h"
 
+#include "tensorflow/contrib/lite/profiler.h"
+#include <chrono>
+
 namespace tflite {
 namespace {
 
@@ -698,6 +701,97 @@ TfLiteStatus Interpreter::Invoke() {
       EnsureTensorDataIsReadable(tensor_index);
     }
   }
+
+  return status;
+}
+
+TfLiteStatus Interpreter::Invoke(const std::string profiler_file_name) {
+  if (!consistent_) {
+    ReportError(&context_, "Invoke called on model that is not consistent.");
+    return kTfLiteError;
+  }
+  if (state_ == kStateUninvokable) {
+    ReportError(&context_, "Invoke called on model that is not ready.");
+    return kTfLiteError;
+  }
+
+  TfLiteStatus status = kTfLiteOk;
+  if (nnapi_delegate_) {
+    if (next_execution_plan_index_to_prepare_ == execution_plan_.size()) {
+      TF_LITE_ENSURE_OK(&context_, nnapi_delegate_->Invoke(this));
+      return kTfLiteOk;
+    } else {
+      // TODO(aselle): In the future, we would like this to be an
+      // automatic tflite CPU fallback.
+      ReportError(&context_,
+                  "NNAPI was requested, but dependent sized tensors "
+                  "being used.\n");
+      return kTfLiteError;
+    }
+  }
+
+  Profiler::get().startInferenceMeasure();
+
+  // Invocations are always done in node order.
+  // Note that calling Invoke repeatedly will cause the original memory plan to
+  // be reused, unless either ResizeInputTensor() or AllocateTensors() has been
+  // called.
+  // TODO(b/71913981): we should force recalculation in the presence of dynamic
+  // tensors, because they may have new value which in turn may affect shapes
+  // and allocations.
+  for (int execution_plan_index = 0;
+       execution_plan_index < execution_plan_.size(); execution_plan_index++) {
+    if (execution_plan_index == next_execution_plan_index_to_prepare_) {
+      TF_LITE_ENSURE_STATUS(PrepareOpsAndTensors());
+      TF_LITE_ENSURE(&context_, next_execution_plan_index_to_prepare_ >=
+                                    execution_plan_index);
+    }
+    int node_index = execution_plan_[execution_plan_index];
+    TfLiteNode& node = nodes_and_registration_[node_index].first;
+    const TfLiteRegistration& registration =
+        nodes_and_registration_[node_index].second;
+
+    // TODO(ycling): This is an extra loop through inputs to check if the data
+    // need to be copied from Delegate buffer to raw memory, which is often not
+    // needed. We may want to cache this in prepare to know if this needs to be
+    // done for a node or not.
+    for (int i = 0; i < node.inputs->size; ++i) {
+      int tensor_index = node.inputs->data[i];
+      if (tensor_index == kOptionalTensor) {
+        continue;
+      }
+      TfLiteTensor* tensor = &tensors_[tensor_index];
+      if (tensor->delegate && tensor->delegate != node.delegate &&
+          tensor->data_is_stale) {
+        EnsureTensorDataIsReadable(tensor_index);
+      }
+    }
+
+    EnsureTensorsVectorCapacity();
+    Profiler::KernelExecutionMeasure measure;
+    measure.name = registration.custom_name;
+
+    auto start = std::chrono::system_clock::now();
+    auto start_clock = std::chrono::duration_cast<std::chrono::milliseconds> (start.time_since_epoch()).count();
+    measure.start_clock = start_clock;
+
+    if (OpInvoke(registration, &node) == kTfLiteError) {
+      status = kTfLiteError;
+    }
+
+    auto stop = std::chrono::system_clock::now();
+    auto stop_clock = std::chrono::duration_cast<std::chrono::milliseconds> (stop.time_since_epoch()).count();
+    measure.stop_clock = stop_clock;
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>
+                    (stop - start);
+    measure.execution_time = duration;
+
+    Profiler::get().addKernelMeasure(measure);
+  }
+
+  Profiler::get().endInferenceMeasure();
+  Profiler::get().dumpMeasures(profiler_file_name);
 
   return status;
 }

@@ -1385,7 +1385,7 @@ class EagerVariableStore(object):
     for input in dataset_iterator:
       with container.as_default():
         x = tf.layers.dense(input, name="l1")
-    print(container.variables)  # Should print the variables used in the layer.
+    print(container.variables())  # Should print the variables used in the layer.
   ```
   """
 

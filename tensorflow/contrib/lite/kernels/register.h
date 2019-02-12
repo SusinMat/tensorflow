@@ -31,6 +31,23 @@ class BuiltinOpResolver : public MutableOpResolver {
   const TfLiteRegistration* FindOp(tflite::BuiltinOperator op,
                                    int version) const override;
   const TfLiteRegistration* FindOp(const char* op, int version) const override;
+// =======
+  TfLiteRegistration* FindOp(tflite::BuiltinOperator op) const override;
+  TfLiteRegistration* FindOp(const char* op) const override;
+  void AddBuiltin(tflite::BuiltinOperator op, TfLiteRegistration* registration, const char* name, int min_version, int max_version);
+  void AddCustom(const char* name, TfLiteRegistration* registration);
+
+ private:
+  struct BuiltinOperatorHasher {
+    size_t operator()(const tflite::BuiltinOperator& x) const {
+      return std::hash<size_t>()(static_cast<size_t>(x));
+    }
+  };
+  std::unordered_map<tflite::BuiltinOperator, TfLiteRegistration*,
+                     BuiltinOperatorHasher>
+      builtins_;
+  std::unordered_map<std::string, TfLiteRegistration*> custom_ops_;
+// >>>>>>> origin/ledl-baseline
 };
 
 }  // namespace builtin
