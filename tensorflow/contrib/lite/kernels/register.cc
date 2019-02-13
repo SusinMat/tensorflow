@@ -158,7 +158,7 @@ BuiltinOpResolver::BuiltinOpResolver() {
   AddBuiltin(BuiltinOperator_MAX_POOL_2D, Register_MAX_POOL_2D(), "MAX_POOL_2D");
   AddBuiltin(BuiltinOperator_L2_POOL_2D, Register_L2_POOL_2D(), "L2_POOL_2D");
   AddBuiltin(BuiltinOperator_CONV_2D, Register_CONV_2D(), "CONV_2D");
-  AddBuiltin(BuiltinOperator_DEPTHWISE_CONV_2D, Register_DEPTHWISE_CONV_2D(), "DEPTHWISE_CONV_2D"
+  AddBuiltin(BuiltinOperator_DEPTHWISE_CONV_2D, Register_DEPTHWISE_CONV_2D(), "DEPTHWISE_CONV_2D",
              /* min_version */ 1,
              /* max_version */ 2);
   AddBuiltin(BuiltinOperator_SVDF, Register_SVDF(), "SVDF");
@@ -185,7 +185,7 @@ BuiltinOpResolver::BuiltinOpResolver() {
   AddBuiltin(BuiltinOperator_L2_NORMALIZATION, Register_L2_NORMALIZATION(), "L2_NORMALIZATION");
   AddBuiltin(BuiltinOperator_LOCAL_RESPONSE_NORMALIZATION,
              Register_LOCAL_RESPONSE_NORMALIZATION(), "LOCAL_RESPONSE_NORMALIZATION");
-  AddBuiltin(BuiltinOperator_LSTM, Register_LSTM(), "LSTM"
+  AddBuiltin(BuiltinOperator_LSTM, Register_LSTM(), "LSTM",
              /* min_version */ 1,
              /* max_version */ 2);
 #if 0
@@ -287,7 +287,7 @@ TfLiteRegistration* BuiltinOpResolver::FindOp(const char* op) const {
 void BuiltinOpResolver::AddBuiltin(tflite::BuiltinOperator op,
                                    TfLiteRegistration* registration,
                                    const char* name,
-				   int min_version = 1, int max_version = 1) {
+				   int min_version, int max_version) {
   registration->builtin_code = op;
   registration->custom_name = name;
   builtins_.insert(std::make_pair(op, registration));

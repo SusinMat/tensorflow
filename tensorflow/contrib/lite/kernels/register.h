@@ -30,11 +30,11 @@ class BuiltinOpResolver : public MutableOpResolver {
 
   const TfLiteRegistration* FindOp(tflite::BuiltinOperator op,
                                    int version) const override;
-  const TfLiteRegistration* FindOp(const char* op, int version) const override;
+  const TfLiteRegistration* FindOp(const char* op, int version) const /*override*/;
 // =======
-  TfLiteRegistration* FindOp(tflite::BuiltinOperator op) const override;
-  TfLiteRegistration* FindOp(const char* op) const override;
-  void AddBuiltin(tflite::BuiltinOperator op, TfLiteRegistration* registration, const char* name, int min_version, int max_version);
+  TfLiteRegistration* FindOp(tflite::BuiltinOperator op) const /*override*/;
+  TfLiteRegistration* FindOp(const char* op) const /*override*/;
+  void AddBuiltin(tflite::BuiltinOperator op, TfLiteRegistration* registration, const char* name, int min_version = 1, int max_version = 1);
   void AddCustom(const char* name, TfLiteRegistration* registration);
 
  private:
