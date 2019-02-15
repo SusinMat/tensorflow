@@ -284,22 +284,7 @@ TfLiteRegistration* BuiltinOpResolver::FindOp(const char* op) const {
   return it != custom_ops_.end() ? it->second : nullptr;
 }
 
-void BuiltinOpResolver::AddBuiltin(tflite::BuiltinOperator op,
-                                   TfLiteRegistration* registration,
-                                   const char* name,
-				   int min_version, int max_version) {
-  registration->builtin_code = op;
-  registration->custom_name = name;
-  builtins_.insert(std::make_pair(op, registration));
-}
-
-void BuiltinOpResolver::AddCustom(const char* name,
-                                  TfLiteRegistration* registration) {
-  registration->builtin_code = BuiltinOperator_CUSTOM;
-  registration->custom_name = name;
-  custom_ops_.insert(std::make_pair(std::string(name), registration));
 // >>>>>>> origin/ledl-baseline
-}
 
 }  // namespace builtin
 }  // namespace ops

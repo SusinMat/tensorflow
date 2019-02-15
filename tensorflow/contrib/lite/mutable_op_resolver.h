@@ -58,8 +58,9 @@ class MutableOpResolver : public OpResolver {
                                    int version) const override;
   const TfLiteRegistration* FindOp(const char* op, int version) const override;
   void AddBuiltin(tflite::BuiltinOperator op,
-                  const TfLiteRegistration* registration, int min_version = 1,
-                  int max_version = 1);
+                  const TfLiteRegistration* registration,
+		  const char *name,
+		  int min_version = 1, int max_version = 1);
   void AddCustom(const char* name, const TfLiteRegistration* registration,
                  int min_version = 1, int max_version = 1);
   void AddAll(const MutableOpResolver& other);

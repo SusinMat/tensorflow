@@ -34,8 +34,10 @@ class BuiltinOpResolver : public MutableOpResolver {
 // =======
   TfLiteRegistration* FindOp(tflite::BuiltinOperator op) const /*override*/;
   TfLiteRegistration* FindOp(const char* op) const /*override*/;
+#if 0
   void AddBuiltin(tflite::BuiltinOperator op, TfLiteRegistration* registration, const char* name, int min_version = 1, int max_version = 1);
   void AddCustom(const char* name, TfLiteRegistration* registration);
+#endif
 
  private:
   struct BuiltinOperatorHasher {

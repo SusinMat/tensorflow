@@ -31,10 +31,11 @@ const TfLiteRegistration* MutableOpResolver::FindOp(const char* op,
 
 void MutableOpResolver::AddBuiltin(tflite::BuiltinOperator op,
                                    const TfLiteRegistration* registration,
+				   const char *name,
                                    int min_version, int max_version) {
   for (int version = min_version; version <= max_version; ++version) {
     TfLiteRegistration new_registration = *registration;
-    new_registration.custom_name = nullptr;
+    new_registration.custom_name = name;
     new_registration.builtin_code = op;
     new_registration.version = version;
     auto op_key = std::make_pair(op, version);
