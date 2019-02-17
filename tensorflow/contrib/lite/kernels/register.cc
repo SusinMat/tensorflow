@@ -273,19 +273,6 @@ BuiltinOpResolver::BuiltinOpResolver() {
 #endif
 }
 
-TfLiteRegistration* BuiltinOpResolver::FindOp(
-    tflite::BuiltinOperator op) const {
-  auto it = builtins_.find(op);
-  return it != builtins_.end() ? it->second : nullptr;
-}
-
-TfLiteRegistration* BuiltinOpResolver::FindOp(const char* op) const {
-  auto it = custom_ops_.find(op);
-  return it != custom_ops_.end() ? it->second : nullptr;
-}
-
-// >>>>>>> origin/ledl-baseline
-
 }  // namespace builtin
 }  // namespace ops
 }  // namespace tflite
