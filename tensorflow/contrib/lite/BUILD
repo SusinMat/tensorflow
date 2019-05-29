@@ -185,6 +185,7 @@ cc_library(
         ":simple_memory_arena",
         ":string",
         ":util",
+	":ledl_profiler",
         "//tensorflow/contrib/lite/c:c_api_internal",
         "//tensorflow/contrib/lite/core/api",
         "//tensorflow/contrib/lite/kernels:eigen_support",
@@ -206,6 +207,15 @@ cc_library(
     hdrs = ["string_util.h"],
     deps = [
         ":framework",
+        ":string",
+    ],
+)
+
+cc_library(
+    name = "ledl_profiler",
+    srcs = ["profiler.cc"],
+    hdrs = ["profiler.h"],
+    deps = [
         ":string",
     ],
 )
