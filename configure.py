@@ -265,6 +265,8 @@ def reset_tf_configure_bazelrc():
     else:
       tf_bazelrc_path = _TF_BAZELRC
     f.write('import %s\n' % tf_bazelrc_path)
+    old_bazelrc_path = os.path.join(_TF_WORKSPACE_ROOT, 'tools', 'bazel.rc')
+    f.write('import %s\n' % old_bazelrc_path)
 
 
 def cleanup_makefile():
