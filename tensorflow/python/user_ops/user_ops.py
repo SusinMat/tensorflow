@@ -31,7 +31,7 @@ def my_fact():
   """Example of overriding the generated code for an Op."""
   return _gen_user_ops.fact()
 
-@tf_export('user_ops.my_dragunov')
-def my_dragunov(*args, **kwargs):
+@tf_export('user_ops.dragunov')
+def dragunov(*args, **kwargs):
   """Example of overriding the generated code for an Op."""
   return _gen_user_ops.dragunov(*args, **kwargs)

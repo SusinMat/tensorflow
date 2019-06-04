@@ -136,7 +136,7 @@ REGISTER_OP("Dragunov")
     .Output("output: float")
     .Attr("stride_h: int")
     .Attr("stride_w: int")
-    .Attr("padding: int")
+    .Attr("padding: int") // TODO: enum class Padding: int8_t { UNKNOWN = 0, SAME, VALID };
     // TODO: probably easier to just read shape from input
     .Attr("out_s: int")
     .SetShapeFn(DragunovShape);
