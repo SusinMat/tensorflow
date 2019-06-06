@@ -120,29 +120,20 @@ Status DragunovShape(shape_inference::InferenceContext* c) {
   TF_RETURN_IF_ERROR(c->GetAttr("padding", &padding));
   TF_RETURN_IF_ERROR(c->GetAttr("stride_h", &stride_h));
   TF_RETURN_IF_ERROR(c->GetAttr("stride_w", &stride_w));
-  // For the SAME(1) padding, the output height and width are computed as:
-  //
-  // out_height = ceil(float(in_height) / float(strides[1]))
-  // out_width  = ceil(float(in_width) / float(strides[2]))
-  //
-  // And
-  //
-  // For the VALID(2) padding, the output height and width are computed as:
-  //
-  // out_height = ceil(float(in_height - filter_height + 1) / float(strides[1]))
-  // out_width  = ceil(float(in_width - filter_width + 1) / float(strides[2]))
 
   shape_inference::DimensionHandle output_channels;
   shape_inference::ShapeHandle dims_f;
-#if 1
   shape_inference::ShapeHandle input_shape;
+  shape_inference::ShapeHandle output_shape;
   shape_inference::ShapeHandle dims_z;
+
   TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 6, &dims_z));
   TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 4, &input_shape));
   in_height = c->Value(c->Dim(input_shape, 1));
   in_width = c->Value(c->Dim(input_shape, 2));
   filter_height = c->Value(c->Dim(dims_z, 1));
   filter_width = c->Value(c->Dim(dims_z, 2));
+
   if (padding == 1) {
     out_height = (int)ceilf(float(in_height) / float(stride_h));
     out_width  = (int)ceilf(float(in_width) / float(stride_w));
@@ -153,13 +144,12 @@ Status DragunovShape(shape_inference::InferenceContext* c) {
     out_height = -1;
     out_width = -1;
   }
-#endif
-  shape_inference::ShapeHandle output_shape;
+
   TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 4, &dims_f));
   TF_RETURN_IF_ERROR(c->Multiply(c->Dim(dims_f, 0), c->Dim(dims_f, 3), &output_channels));
-
   output_shape = c->MakeShape({c->MakeDim(1), c->MakeDim(out_height), c->MakeDim(out_width), output_channels});
   c->set_output(0, output_shape);
+
   return Status::OK();
 }
 
@@ -169,9 +159,9 @@ REGISTER_OP("Dragunov")
     .Input("filter_z: float")
     .Input("filter_f: float")
     .Output("output: float")
-    .Attr("stride_h: int")
-    .Attr("stride_w: int")
-    .Attr("padding: int") // TODO: enum class Padding: int8_t { UNKNOWN = 0, SAME, VALID };
+    .Attr("stride_h: int = 1")
+    .Attr("stride_w: int = 1")
+    .Attr("padding: int = 0") // TODO: enum class Padding: int8_t { UNKNOWN = 0, SAME, VALID };
     .SetShapeFn(DragunovShape);
 
 
@@ -181,14 +171,7 @@ class DragunovOp : public tensorflow::OpKernel {
       : OpKernel(context) {}
 
   void Compute(tensorflow::OpKernelContext* context) override {
-    // Output a scalar string.
-    tensorflow::Tensor* output_tensor = nullptr;
-    OP_REQUIRES_OK(context, context->allocate_output(
-                                0, tensorflow::TensorShape(), &output_tensor));
-    using tensorflow::string;
-    auto output = output_tensor->template scalar<string>();
-
-    output() = "0! == 1";
+    (void)0;
   }
 };
 
