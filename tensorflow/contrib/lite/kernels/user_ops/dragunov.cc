@@ -72,13 +72,14 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
 
 	const float *input_data = GetTensorData<float>(input);
 	float *output_data = GetTensorData<float>(output);
-	size_t count = 1;
-	int num_dims = NumDimensions(output);
-	for (size_t i = 0; i < num_dims; ++i) {
-		count *= output->dims->data[i];
-	}
-	for (size_t i = 0; i < count; ++i) {
-		output_data[i] = 0.0;
+  const RuntimeShape output_shape = GetTensorShape(output);
+	int count = output_shape.FlatSize();
+	int num_dims = output_shape.DimensionsCount();
+  // printf("%d\n", output_shape.Dims(2));
+  // printf("%d\n", count);
+
+	for (int i = 0; i < count; ++i) {
+		output_data[i] = 0.5;
 	}
 
 	return kTfLiteOk;
