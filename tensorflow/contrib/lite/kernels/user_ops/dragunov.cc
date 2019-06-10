@@ -4,9 +4,17 @@
 #include "tensorflow/contrib/lite/kernels/kernel_util.h"
 #include "tensorflow/contrib/lite/kernels/internal/tensor.h"
 
+#include "flatbuffers/flexbuffers.h" // TF:flatbuffers
+
 namespace tflite {
 namespace ops {
 namespace dragunov {
+
+struct TfLiteDragunovParams {
+  int stride_h;
+  int stride_w;
+  int padding;
+};
 
 constexpr int INPUT_TENSOR = 0;
 constexpr int OUTPUT_TENSOR = 0;
@@ -14,8 +22,30 @@ constexpr int C_TENSOR = 1;
 constexpr int Z_TENSOR = 2;
 constexpr int F_TENSOR = 3;
 
+void *Init(TfLiteContext *context, const char *buffer, size_t length) {
+  struct TfLiteDragunovParams *data = new struct TfLiteDragunovParams;
+
+  const uint8_t *buffer_t = reinterpret_cast<const uint8_t *>(buffer);
+
+  const flexbuffers::Map& m = flexbuffers::GetRoot(buffer_t, length).AsMap();
+  data->stride_h = m["stride_h"].AsInt64();
+  data->stride_w = m["stride_w"].AsInt64();
+  data->padding = m["padding"].AsInt64();
+
+  return data;
+}
+
+void Free(TfLiteContext *context, void *buffer) {
+  delete reinterpret_cast<struct TfLiteDragunovParams *>(buffer);
+}
+
 TfLiteStatus Prepare(TfLiteContext *context, TfLiteNode *node)
 {
+  struct TfLiteDragunovParams *params = reinterpret_cast<TfLiteDragunovParams *>(node->user_data);
+
+  printf("Strides [h, w]: [%d, %d]\n", params->stride_h, params->stride_w);
+  printf("Padding type: %d\n", params->padding);
+
 	TF_LITE_ENSURE_EQ(context, NumInputs(node), 4);
 	TF_LITE_ENSURE_EQ(context, NumOutputs(node), 1);
 
@@ -89,7 +119,7 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
 
 TfLiteRegistration *Register_DRAGUNOV()
 {
-	static TfLiteRegistration r = {nullptr, nullptr, dragunov::Prepare, dragunov::Eval};
+	static TfLiteRegistration r = {dragunov::Init, dragunov::Free, dragunov::Prepare, dragunov::Eval};
 	return &r;
 }
 
