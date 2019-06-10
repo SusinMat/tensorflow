@@ -27,7 +27,7 @@ void *Init(TfLiteContext *context, const char *buffer, size_t length) {
 
   const uint8_t *buffer_t = reinterpret_cast<const uint8_t *>(buffer);
 
-  const flexbuffers::Map& m = flexbuffers::GetRoot(buffer_t, length).AsMap();
+  const flexbuffers::Map &m = flexbuffers::GetRoot(buffer_t, length).AsMap();
   data->stride_h = m["stride_h"].AsInt64();
   data->stride_w = m["stride_w"].AsInt64();
   data->padding = m["padding"].AsInt64();
@@ -92,7 +92,7 @@ TfLiteStatus Prepare(TfLiteContext *context, TfLiteNode *node)
 
   TfLiteStatus retval = context->ResizeTensor(context, output, output_size);
 
-	return retval;
+  return retval;
 }
 
 TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
