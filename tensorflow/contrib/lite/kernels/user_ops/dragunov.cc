@@ -44,50 +44,50 @@ TfLiteStatus Prepare(TfLiteContext *context, TfLiteNode *node)
   struct TfLiteDragunovParams *params = reinterpret_cast<TfLiteDragunovParams *>(node->user_data);
 
   printf("Strides [h, w]: [%d, %d]\n", params->stride_h, params->stride_w);
-  printf("Padding type: %d\n", params->padding);
+  printf("Padding type: ");
+
+  switch(params->padding) {
+    case 0:
+      printf("UNKNOWN(0)\n");
+      break;
+    case 1:
+      printf("SAME(1)\n");
+      break;
+    case 2:
+      printf("VALID(2)\n");
+      break;
+    default:
+      printf("ERROR(%d)\n", params->padding);
+      break;
+  }
 
 	TF_LITE_ENSURE_EQ(context, NumInputs(node), 4);
 	TF_LITE_ENSURE_EQ(context, NumOutputs(node), 1);
 
 	const TfLiteTensor *input = GetInput(context, node, INPUT_TENSOR);
 	const TfLiteTensor *f_filter = GetInput(context, node, F_TENSOR);
+	const TfLiteTensor *z_filter = GetInput(context, node, Z_TENSOR);
 	TfLiteTensor *output = GetOutput(context, node, OUTPUT_TENSOR);
 
   TF_LITE_ENSURE_EQ(context, input->type, output->type);
 
-#if 0
-	const TfLiteTensor *c_filter = GetInput(context, node, C_TENSOR);
-	const TfLiteTensor *z_filter = GetInput(context, node, Z_TENSOR);
-	const int input_dims = NumDimensions(input);
-  printf("input dims: ");
-  for (int i = 0; i < input_dims; ++i)
-    printf("%d ", input->dims->data[i]);
-  printf("\n");
+  int in_height = input->dims->data[1], in_width = input->dims->data[2];
+  int filter_height = z_filter->dims->data[1], filter_width = z_filter->dims->data[2];
+  int out_height = -1, out_width = -1;
 
-	const int c_dims = NumDimensions(c_filter);
-  printf("c_filter dims: ");
-  for (int i = 0; i < c_dims; ++i)
-    printf("%d ", c_filter->dims->data[i]);
-  printf("\n");
-
-	const int z_dims = NumDimensions(z_filter);
-  printf("z_filter dims: ");
-  for (int i = 0; i < z_dims; ++i)
-    printf("%d ", z_filter->dims->data[i]);
-  printf("\n");
-
-	const int f_dims = NumDimensions(f_filter);
-  printf("f_filter dims: ");
-  for (int i = 0; i < f_dims; ++i)
-    printf("%d ", f_filter->dims->data[i]);
-  printf("\n");
-#endif
+  if (params->padding == 1) {
+    out_height = (int)ceilf(float(in_height) / float(params->stride_h));
+    out_width  = (int)ceilf(float(in_width) / float(params->stride_w));
+  } else if (params->padding == 2) {
+    out_height = (int)ceilf(float(in_height - filter_height + 1) / float(params->stride_h));
+    out_width  = (int)ceilf(float(in_width - filter_width + 1) / float(params->stride_w));
+  }
 
 	TfLiteIntArray *output_size = TfLiteIntArrayCreate(4);
 
   output_size->data[0] = 1;
-  output_size->data[1] = input->dims->data[1];
-  output_size->data[2] = input->dims->data[2];
+  output_size->data[1] = out_height;
+  output_size->data[2] = out_width;
   output_size->data[3] = f_filter->dims->data[0] * f_filter->dims->data[3];
 
   TfLiteStatus retval = context->ResizeTensor(context, output, output_size);
