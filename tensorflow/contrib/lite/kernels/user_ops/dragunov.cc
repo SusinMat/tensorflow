@@ -21,6 +21,8 @@ constexpr int OUTPUT_TENSOR = 0;
 constexpr int C_TENSOR = 1;
 constexpr int Z_TENSOR = 2;
 constexpr int F_TENSOR = 3;
+constexpr int ICLUST_TENSOR = 4;
+constexpr int OCLUST_TENSOR = 5;
 
 void *Init(TfLiteContext *context, const char *buffer, size_t length) {
   struct TfLiteDragunovParams *data = new struct TfLiteDragunovParams;
@@ -61,7 +63,7 @@ TfLiteStatus Prepare(TfLiteContext *context, TfLiteNode *node)
       break;
   }
 
-	TF_LITE_ENSURE_EQ(context, NumInputs(node), 4);
+	TF_LITE_ENSURE_EQ(context, NumInputs(node), 6);
 	TF_LITE_ENSURE_EQ(context, NumOutputs(node), 1);
 
 	const TfLiteTensor *input = GetInput(context, node, INPUT_TENSOR);
@@ -98,16 +100,38 @@ TfLiteStatus Prepare(TfLiteContext *context, TfLiteNode *node)
 TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
 {
 	const TfLiteTensor *input = GetInput(context, node, INPUT_TENSOR);
+	const TfLiteTensor *iclust = GetInput(context, node, ICLUST_TENSOR);
+	const TfLiteTensor *oclust = GetInput(context, node, OCLUST_TENSOR);
 	TfLiteTensor *output = GetOutput(context, node, OUTPUT_TENSOR);
 
 	const float *input_data = GetTensorData<float>(input);
+	const int *iclust_data = GetTensorData<int>(iclust);
+	const int *oclust_data = GetTensorData<int>(oclust);
 	float *output_data = GetTensorData<float>(output);
   const RuntimeShape output_shape = GetTensorShape(output);
-	int count = output_shape.FlatSize();
-	int num_dims = output_shape.DimensionsCount();
-  // printf("%d\n", output_shape.Dims(2));
-  // printf("%d\n", count);
+  const RuntimeShape iclust_shape = GetTensorShape(iclust);
+  const RuntimeShape oclust_shape = GetTensorShape(oclust);
 
+  // printf("iclust : ");
+  // for (int i = 0; i < iclust_shape.Dims(0); ++i) {
+  //   printf("[");
+  //   for (int j = 0; j < iclust_shape.Dims(1); ++j) {
+  //     printf("%d, ", iclust_data[i * iclust_shape.Dims(1) + j]);
+  //   }
+  //   printf("], ");
+  // }
+  // printf("\n");
+  // printf("oclust : ");
+  // for (int i = 0; i < oclust_shape.Dims(0); ++i) {
+  //   printf("[");
+  //   for (int j = 0; j < oclust_shape.Dims(1); ++j) {
+  //     printf("%d, ", oclust_data[i * oclust_shape.Dims(1) + j]);
+  //   }
+  //   printf("], ");
+  // }
+  // printf("\n");
+
+	int count = output_shape.FlatSize();
 	for (int i = 0; i < count; ++i) {
 		output_data[i] = 0.5;
 	}
