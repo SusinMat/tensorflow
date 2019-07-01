@@ -50,10 +50,12 @@ REGISTER_OP("Dragunov")
     .Input("filter_f: float")
     .Input("input_clusters: int32")
     .Input("output_clusters: int32")
+    .Input("bias: float")
     .Output("output: float")
     .Attr("stride_h: int = 1")
     .Attr("stride_w: int = 1")
     .Attr("padding: int = 0") // TODO: enum class Padding: int8_t { UNKNOWN = 0, SAME, VALID };
+    .Attr("fused_activation_function: int")
     .SetShapeFn(DragunovShape);
 
 
