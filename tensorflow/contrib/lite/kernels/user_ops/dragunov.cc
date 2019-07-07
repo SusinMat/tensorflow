@@ -252,6 +252,7 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
     }
   }
 
+#if 1
   for (int ic = 0; ic < iclust; ++ic) {
     for (int oc = 0; oc < oclust; ++oc) {
       multithreaded_ops::Conv(
@@ -264,6 +265,7 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
           null_tensor_shape, null_tensor_data);
     }
   }
+#endif
 
   // Phase Z
   // hwcn is always required
@@ -334,7 +336,6 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   op_params.float_activation_min = output_activation_min;
   op_params.float_activation_max = output_activation_max;
 
-  RuntimeShape F_input_shape({1, output_shape.Dims(1), output_shape.Dims(2), oclust_reduced_size});
   RuntimeShape F_filter_shape({oclust, 1, 1, oclust_reduced_size});
   RuntimeShape F_output_shape({1, output_shape.Dims(1), input_shape.Dims(2), oclust_size});
 
@@ -342,9 +343,25 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   const int F_output_flat_size = F_output_shape.FlatSize();
 
   float *F_outputs;
-  F_outputs = (float *)calloc(oclust * F_output_flat_size, sizeof(float));
+  F_outputs = (float *)calloc(cluster_pairs * F_output_flat_size, sizeof(float));
   float *F_filters;
   F_filters = (float *)calloc(cluster_pairs * F_filter_flat_size, sizeof(float));
+
+#if 1
+  for (int ic = 0; ic < iclust; ++ic) {
+    for (int oc = 0; oc < oclust; ++oc) {
+      multithreaded_ops::Conv(
+          *eigen_support::GetThreadPoolDevice(context),
+          op_params,
+          Z_output_shape, (float *)(Z_outputs + (ic * oclust + oc) * Z_output_flat_size),
+          F_filter_shape, (float *)(F_filters + (ic * oclust + oc) * F_filter_flat_size),
+          null_tensor_shape, null_tensor_data,
+          F_output_shape, (float *)(F_outputs + (ic * oclust + oc) * F_output_flat_size),
+          null_tensor_shape, null_tensor_data);
+    }
+  }
+#endif
+
 #if 0
   printf("iclusters : ");
   for (int i = 0; i < iclusters_shape.Dims(0); ++i) {
