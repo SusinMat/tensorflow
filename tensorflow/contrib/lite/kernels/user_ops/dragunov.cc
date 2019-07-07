@@ -206,8 +206,8 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   // op_params.padding_type = RuntimePaddingType(params->padding_type);
   // op_params.padding_values.height = params->padding_values.height;
   // op_params.padding_values.width = params->padding_values.width;
-  op_params.stride_height = params->stride_h;
-  op_params.stride_width = params->stride_w;
+  op_params.stride_height = 1;
+  op_params.stride_width = 1;
   op_params.dilation_height_factor = dilation_height_factor;
   op_params.dilation_width_factor = dilation_width_factor;
   op_params.float_activation_min = output_activation_min;
@@ -323,6 +323,28 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   }
 #endif
 
+  // Phase F
+  op_params.padding_type = PaddingType::kNone;
+  op_params.padding_values.height = 0;
+  op_params.padding_values.width = 0;
+  op_params.stride_height = 1;
+  op_params.stride_width = 1;
+  op_params.dilation_height_factor = dilation_height_factor;
+  op_params.dilation_width_factor = dilation_width_factor;
+  op_params.float_activation_min = output_activation_min;
+  op_params.float_activation_max = output_activation_max;
+
+  RuntimeShape F_input_shape({1, output_shape.Dims(1), output_shape.Dims(2), oclust_reduced_size});
+  RuntimeShape F_filter_shape({oclust, 1, 1, oclust_reduced_size});
+  RuntimeShape F_output_shape({1, output_shape.Dims(1), input_shape.Dims(2), oclust_size});
+
+  const int F_filter_flat_size = F_filter_shape.FlatSize();
+  const int F_output_flat_size = F_output_shape.FlatSize();
+
+  float *F_outputs;
+  F_outputs = (float *)calloc(oclust * F_output_flat_size, sizeof(float));
+  float *F_filters;
+  F_filters = (float *)calloc(cluster_pairs * F_filter_flat_size, sizeof(float));
 #if 0
   printf("iclusters : ");
   for (int i = 0; i < iclusters_shape.Dims(0); ++i) {
@@ -349,11 +371,13 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
 		output_data[i] = 0.5f;
 	}
 
-  free(C_filters);
   free(sliced_input);
+  free(C_filters);
   free(C_outputs);
   free(Z_filters);
   free(Z_outputs);
+  free(F_filters);
+  free(F_outputs);
 
 	return kTfLiteOk;
 }
