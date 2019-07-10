@@ -1,5 +1,6 @@
 #include "tensorflow/contrib/lite/kernels/eigen_support.h"
 #include "tensorflow/contrib/lite/kernels/internal/optimized/multithreaded_conv.h"
+#include "tensorflow/contrib/lite/kernels/internal/optimized/optimized_ops.h"
 #include "tensorflow/contrib/lite/kernels/internal/tensor.h"
 #include "tensorflow/contrib/lite/kernels/kernel_util.h"
 #include "tensorflow/contrib/lite/kernels/padding.h"
@@ -155,6 +156,7 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
 	const float *z_filter_data = GetTensorData<float>(z_filter);
 	const int *iclusters_data = GetTensorData<int>(iclusters);
 	const int *oclusters_data = GetTensorData<int>(oclusters);
+	const float *bias_data = GetTensorData<float>(bias);
 	float *output_data = GetTensorData<float>(output);
   const RuntimeShape input_shape = GetTensorShape(input);
   const RuntimeShape output_shape = GetTensorShape(output);
@@ -163,18 +165,26 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   const RuntimeShape c_filter_shape = GetTensorShape(c_filter);
   const RuntimeShape z_filter_shape = GetTensorShape(z_filter);
   const RuntimeShape f_filter_shape = GetTensorShape(f_filter);
+  const RuntimeShape bias_shape = GetTensorShape(bias);
   float *null_tensor_data = nullptr;
   RuntimeShape null_tensor_shape;
 
-  const int iclust = iclusters_shape.Dims(0);
-  const int oclust = oclusters_shape.Dims(0);
-  const int cluster_pairs = iclust * oclust;
-  const int iclust_size = c_filter_shape.Dims(0);
+  const int iclust              = iclusters_shape.Dims(0);
+  const int oclust              = oclusters_shape.Dims(0);
+  const int cluster_pairs       = iclust * oclust;
+  const int iclust_size         = c_filter_shape.Dims(0);
   const int iclust_reduced_size = c_filter_shape.Dims(1);
-  const int oclust_size = f_filter_shape.Dims(0);
+  const int oclust_size         = f_filter_shape.Dims(0);
   const int oclust_reduced_size = f_filter_shape.Dims(1);
-  const int filter_height = z_filter_shape.Dims(1);
-  const int filter_width = z_filter_shape.Dims(2);
+
+  const int input_width         = input_shape.Dims(2);
+  const int input_height        = input_shape.Dims(1);
+  const int filter_height       = z_filter_shape.Dims(1);
+  const int filter_width        = z_filter_shape.Dims(2);
+  const int output_height       = output_shape.Dims(1);
+  const int output_width        = output_shape.Dims(2);
+  const int output_depth        = output_shape.Dims(3);
+
   printf("iclust = %d ; oclust = %d\n", iclust, oclust);
 
   float output_activation_min, output_activation_max;
@@ -210,8 +220,6 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   op_params.stride_width = 1;
   op_params.dilation_height_factor = dilation_height_factor;
   op_params.dilation_width_factor = dilation_width_factor;
-  op_params.float_activation_min = output_activation_min;
-  op_params.float_activation_max = output_activation_max;
 
   // TODO: Most of what follows should, instead, be done in Prepare
   RuntimeShape C_input_shape({1, input_shape.Dims(1), input_shape.Dims(2), iclust_size});
@@ -230,12 +238,12 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   C_outputs = (float *)calloc(cluster_pairs * C_output_flat_size, sizeof(float));
 
 
-  for (int clust = 0; clust < iclust; ++clust) {
-    for (int i = 0; i < input_shape.Dims(1); ++i) {
-      for (int j = 0; j < input_shape.Dims(2); ++j) {
+  for (int ic = 0; ic < iclust; ++ic) {
+    for (int i = 0; i < input_height; ++i) {
+      for (int j = 0; j < input_width; ++j) {
         for (int k = 0; k < iclust_size; ++k) {
-          int source_iclust = iclusters_data[INDEX_2D(iclusters_shape, clust, k)];
-          sliced_input[INDEX_4D(C_input_shape, 0, i, j, k)] = input_data[INDEX_4D(input_shape, 0, i, j, source_iclust)];
+          int source_iclust = iclusters_data[INDEX_2D(iclusters_shape, ic, k)];
+          (sliced_input + ic * C_input_flat_size)[INDEX_4D(C_input_shape, 0, i, j, k)] = input_data[INDEX_4D(input_shape, 0, i, j, source_iclust)];
         }
       }
     }
@@ -333,8 +341,6 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   op_params.stride_width = 1;
   op_params.dilation_height_factor = dilation_height_factor;
   op_params.dilation_width_factor = dilation_width_factor;
-  op_params.float_activation_min = output_activation_min;
-  op_params.float_activation_max = output_activation_max;
 
   RuntimeShape F_filter_shape({oclust, 1, 1, oclust_reduced_size});
   RuntimeShape F_output_shape({1, output_shape.Dims(1), input_shape.Dims(2), oclust_size});
@@ -353,8 +359,8 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
       multithreaded_ops::Conv(
           *eigen_support::GetThreadPoolDevice(context),
           op_params,
-          Z_output_shape, (float *)(Z_outputs + (ic * oclust + oc) * Z_output_flat_size),
-          F_filter_shape, (float *)(F_filters + (ic * oclust + oc) * F_filter_flat_size),
+          Z_output_shape, (const float *)(Z_outputs + (ic * oclust + oc) * Z_output_flat_size),
+          F_filter_shape, (const float *)(F_filters + (ic * oclust + oc) * F_filter_flat_size),
           null_tensor_shape, null_tensor_data,
           F_output_shape, (float *)(F_outputs + (ic * oclust + oc) * F_output_flat_size),
           null_tensor_shape, null_tensor_data);
@@ -362,31 +368,27 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   }
 #endif
 
-#if 0
-  printf("iclusters : ");
-  for (int i = 0; i < iclusters_shape.Dims(0); ++i) {
-    printf("[");
-    for (int j = 0; j < iclusters_shape.Dims(1); ++j) {
-      printf("%d, ", iclusters_data[INDEX_2D(iclusters_shape, i, j)]);
-    }
-    printf("], ");
-  }
-  printf("\n");
-  printf("oclusters : ");
-  for (int i = 0; i < oclusters_shape.Dims(0); ++i) {
-    printf("[");
-    for (int j = 0; j < oclusters_shape.Dims(1); ++j) {
-      printf("%d, ", oclusters_data[INDEX_2D(oclusters_shape, i, j)]);
-    }
-    printf("], ");
-  }
-  printf("\n");
-#endif
-
 	int count = output_shape.FlatSize();
 	for (int i = 0; i < count; ++i) {
-		output_data[i] = 0.5f;
+		output_data[i] = 0.0f;
 	}
+
+  for (int ic = 0; ic < iclust; ++ic) {
+    for (int oc = 0; oc < oclust; ++oc) {
+      for (int i = 0; i < filter_height; ++i) {
+        for (int j = 0; j < filter_width; ++j) {
+          for (int c = 0; c < oclust_size; ++c) {
+            int dest_channel = oclusters_data[INDEX_2D(oclusters_shape, oc, c)];
+            output_data[INDEX_4D(output_shape, 0, i, j, dest_channel)] += (F_outputs + (ic * oclust + oc) * F_output_flat_size)[INDEX_4D(Z_output_shape, 0, i, j, c)];
+          }
+        }
+      }
+    }
+  }
+  optimized_ops::AddBiasAndEvalActivationFunction(
+      output_activation_min, output_activation_max,
+      bias_shape, bias_data,
+      output_shape, output_data);
 
   free(sliced_input);
   free(C_filters);
