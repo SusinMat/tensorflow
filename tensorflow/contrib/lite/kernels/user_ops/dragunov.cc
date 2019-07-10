@@ -154,6 +154,7 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
 	const float *input_data = GetTensorData<float>(input);
 	const float *c_filter_data = GetTensorData<float>(c_filter);
 	const float *z_filter_data = GetTensorData<float>(z_filter);
+	const float *f_filter_data = GetTensorData<float>(f_filter);
 	const int *iclusters_data = GetTensorData<int>(iclusters);
 	const int *oclusters_data = GetTensorData<int>(oclusters);
 	const float *bias_data = GetTensorData<float>(bias);
@@ -253,7 +254,6 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
     for (int oc = 0; oc < oclust; ++oc) {
       for (int c = 0; c < iclust_size; ++c) {
         for (int f = 0; f < iclust_reduced_size; ++f) {
-          // printf("ic=%d oc=%d c=%d f=%d\n", ic, oc, c, f);
           (C_filters + (ic * oclust + oc) * C_filter_flat_size)[INDEX_4D(C_filter_shape, f, 0, 0, c)] = c_filter_data[INDEX_4D(c_filter_shape, c, f, ic, oc)];
         }
       }
@@ -274,6 +274,9 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
     }
   }
 #endif
+
+  free(sliced_input);
+  free(C_filters);
 
   // Phase Z
   // hwcn is always required
@@ -308,9 +311,7 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
         for (int j = 0; j < filter_width; ++j) {
           for (int c = 0; c < iclust_reduced_size; ++c) {
             for (int f = 0; f < oclust_reduced_size; ++f) {
-              // printf("ic=%d oc=%d i=%d j=%d c=%d f=%d\n", ic, oc, i, j, c, f);
-              // printf("Indexes: %d %d\n", INDEX_4D(Z_filter_shape, f, i, j, c), INDEX_6D(z_filter_shape, f, i, j, c, ic, oc));
-              (Z_filters + (ic * oclust + oc) * Z_filter_flat_size)[INDEX_4D(Z_filter_shape_hwcn, i, j, c, f)] = z_filter_data[INDEX_6D(z_filter_shape, f, i, j, c, ic, oc)];
+              (Z_filters + (ic * oclust + oc) * Z_filter_flat_size)[INDEX_4D(Z_filter_shape, f, i, j, c)] = z_filter_data[INDEX_6D(z_filter_shape, f, i, j, c, ic, oc)];
             }
           }
         }
@@ -333,6 +334,9 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   }
 #endif
 
+  free(C_outputs);
+  free(Z_filters);
+
   // Phase F
   op_params.padding_type = PaddingType::kNone;
   op_params.padding_values.height = 0;
@@ -342,8 +346,8 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   op_params.dilation_height_factor = dilation_height_factor;
   op_params.dilation_width_factor = dilation_width_factor;
 
-  RuntimeShape F_filter_shape({oclust, 1, 1, oclust_reduced_size});
-  RuntimeShape F_output_shape({1, output_shape.Dims(1), input_shape.Dims(2), oclust_size});
+  RuntimeShape F_filter_shape({oclust_size, 1, 1, oclust_reduced_size});
+  RuntimeShape F_output_shape({1, output_shape.Dims(1), output_shape.Dims(2), oclust_size});
 
   const int F_filter_flat_size = F_filter_shape.FlatSize();
   const int F_output_flat_size = F_output_shape.FlatSize();
@@ -352,6 +356,16 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   F_outputs = (float *)calloc(cluster_pairs * F_output_flat_size, sizeof(float));
   float *F_filters;
   F_filters = (float *)calloc(cluster_pairs * F_filter_flat_size, sizeof(float));
+
+  for (int ic = 0; ic < iclust; ++ic) {
+    for (int oc = 0; oc < oclust; ++oc) {
+      for (int c = 0; c < oclust_reduced_size; ++c) {
+        for (int f = 0; f < oclust_size; ++f) {
+          (F_filters + (ic * oclust + oc) * F_filter_flat_size)[INDEX_4D(F_filter_shape, f, 0, 0, c)] = f_filter_data[INDEX_4D(f_filter_shape, f, c, ic, oc)];
+        }
+      }
+    }
+  }
 
 #if 1
   for (int ic = 0; ic < iclust; ++ic) {
@@ -367,6 +381,13 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
     }
   }
 #endif
+
+  free(Z_outputs);
+  free(F_filters);
+
+  for (int i = 0; i < F_output_flat_size * cluster_pairs; ++i) {
+    printf("%f\n", F_outputs[i]);
+  }
 
 	int count = output_shape.FlatSize();
 	for (int i = 0; i < count; ++i) {
@@ -385,18 +406,19 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
       }
     }
   }
+
+  free(F_outputs);
+
+#if 1
   optimized_ops::AddBiasAndEvalActivationFunction(
       output_activation_min, output_activation_max,
       bias_shape, bias_data,
       output_shape, output_data);
+#endif
 
-  free(sliced_input);
-  free(C_filters);
-  free(C_outputs);
-  free(Z_filters);
-  free(Z_outputs);
-  free(F_filters);
-  free(F_outputs);
+  for (int i = 0; i < count; ++i) {
+    printf("%f\n", output_data[i]);
+  }
 
 	return kTfLiteOk;
 }
