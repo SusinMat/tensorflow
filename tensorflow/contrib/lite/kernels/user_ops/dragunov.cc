@@ -178,8 +178,8 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   const int oclust_size         = f_filter_shape.Dims(0);
   const int oclust_reduced_size = f_filter_shape.Dims(1);
 
-  const int input_width         = input_shape.Dims(2);
   const int input_height        = input_shape.Dims(1);
+  const int input_width         = input_shape.Dims(2);
   const int filter_height       = z_filter_shape.Dims(1);
   const int filter_width        = z_filter_shape.Dims(2);
   const int output_height       = output_shape.Dims(1);
@@ -223,9 +223,9 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   op_params.dilation_width_factor = dilation_width_factor;
 
   // TODO: Most of what follows should, instead, be done in Prepare
-  RuntimeShape C_input_shape({1, input_shape.Dims(1), input_shape.Dims(2), iclust_size});
+  RuntimeShape C_input_shape({1, input_height, input_width, iclust_size});
   RuntimeShape C_filter_shape({iclust_reduced_size, 1, 1, iclust_size});
-  RuntimeShape C_output_shape({1, input_shape.Dims(1), input_shape.Dims(2), iclust_reduced_size});
+  RuntimeShape C_output_shape({1, input_height, input_width, iclust_reduced_size});
 
   const int C_input_flat_size = C_input_shape.FlatSize();
   const int C_filter_flat_size = C_filter_shape.FlatSize();
@@ -294,7 +294,7 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   // RuntimeShape Z_input_shape = C_output_shape;
   RuntimeShape Z_filter_shape({oclust_reduced_size, filter_height, filter_width, iclust_reduced_size});
   RuntimeShape Z_filter_shape_hwcn({filter_height, filter_width, iclust_reduced_size, oclust_reduced_size}); // hwcn
-  RuntimeShape Z_output_shape({1, output_shape.Dims(1), output_shape.Dims(2), oclust_reduced_size});
+  RuntimeShape Z_output_shape({1, output_height, output_width, oclust_reduced_size});
 
   // const int Z_input_flat_size = Z_input_shape.FlatSize();
   const int Z_filter_flat_size = Z_filter_shape.FlatSize();
@@ -347,7 +347,7 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   op_params.dilation_width_factor = dilation_width_factor;
 
   RuntimeShape F_filter_shape({oclust_size, 1, 1, oclust_reduced_size});
-  RuntimeShape F_output_shape({1, output_shape.Dims(1), output_shape.Dims(2), oclust_size});
+  RuntimeShape F_output_shape({1, output_height, output_width, oclust_size});
 
   const int F_filter_flat_size = F_filter_shape.FlatSize();
   const int F_output_flat_size = F_output_shape.FlatSize();
@@ -396,8 +396,8 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
 
   for (int ic = 0; ic < iclust; ++ic) {
     for (int oc = 0; oc < oclust; ++oc) {
-      for (int i = 0; i < filter_height; ++i) {
-        for (int j = 0; j < filter_width; ++j) {
+      for (int i = 0; i < output_height; ++i) {
+        for (int j = 0; j < output_width; ++j) {
           for (int c = 0; c < oclust_size; ++c) {
             int dest_channel = oclusters_data[INDEX_2D(oclusters_shape, oc, c)];
             output_data[INDEX_4D(output_shape, 0, i, j, dest_channel)] += (F_outputs + (ic * oclust + oc) * F_output_flat_size)[INDEX_4D(Z_output_shape, 0, i, j, c)];
@@ -416,9 +416,11 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
       output_shape, output_data);
 #endif
 
-  for (int i = 0; i < count; ++i) {
+#if 0
+  for (int i = 0; i < output_shape.FlatSize(); ++i) {
     printf("%f\n", output_data[i]);
   }
+#endif
 
 	return kTfLiteOk;
 }
