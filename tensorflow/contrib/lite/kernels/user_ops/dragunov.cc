@@ -78,6 +78,15 @@ void Free(TfLiteContext *context, void *buffer) {
   delete reinterpret_cast<struct TfLiteDragunovParams *>(buffer);
 }
 
+void TransposeFloatArray(float *input_data, float *output_data, int rows, int cols) {
+  for (int i = 0; i < rows; ++i) {
+    for (int j = 0; j < cols; ++j) {
+      const float in_value = input_data[i * cols + j];
+      output_data[j * rows + i] = in_value;
+    }
+  }
+}
+
 TfLiteStatus Prepare(TfLiteContext *context, TfLiteNode *node)
 {
   // TODO: read kernels/conv.cc and implement the transposition to HWCN weights
@@ -214,9 +223,6 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   op_params.padding_type = PaddingType::kNone;
   op_params.padding_values.height = 0;
   op_params.padding_values.width = 0;
-  // op_params.padding_type = RuntimePaddingType(params->padding_type);
-  // op_params.padding_values.height = params->padding_values.height;
-  // op_params.padding_values.width = params->padding_values.width;
   op_params.stride_height = 1;
   op_params.stride_width = 1;
   op_params.dilation_height_factor = dilation_height_factor;
@@ -260,6 +266,15 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
     }
   }
 
+  float *C_filters_transposed;
+  C_filters_transposed = (float *)calloc(cluster_pairs * C_filter_flat_size, sizeof(float));
+
+  for (int ic = 0; ic < iclust; ++ic) {
+    for (int oc = 0; oc < oclust; ++oc) {
+      TransposeFloatArray((C_filters + (ic * oclust + oc) * C_filter_flat_size), (C_filters_transposed + (ic * oclust + oc) * C_filter_flat_size), C_filter_shape.Dims(0), C_filter_shape.Dims(1) * C_filter_shape.Dims(2) * C_filter_shape.Dims(3));
+    }
+  }
+
 #if 1
   for (int ic = 0; ic < iclust; ++ic) {
     for (int oc = 0; oc < oclust; ++oc) {
@@ -267,7 +282,8 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
           *eigen_support::GetThreadPoolDevice(context),
           op_params,
           C_input_shape, (const float *)(sliced_input + ic * C_input_flat_size),
-          C_filter_shape, (const float *)(C_filters + (ic * oclust + oc) * C_filter_flat_size),
+          // C_filter_shape, (const float *)(C_filters + (ic * oclust + oc) * C_filter_flat_size),
+          C_filter_shape, (const float *)(C_filters_transposed + (ic * oclust + oc) * C_filter_flat_size),
           null_tensor_shape, null_tensor_data,
           C_output_shape, (float *)(C_outputs + (ic * oclust + oc) * C_output_flat_size),
           null_tensor_shape, null_tensor_data);
@@ -277,6 +293,7 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
 
   free(sliced_input);
   free(C_filters);
+  free(C_filters_transposed);
 
   // Phase Z
   // hwcn is always required
@@ -311,6 +328,7 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
         for (int j = 0; j < filter_width; ++j) {
           for (int c = 0; c < iclust_reduced_size; ++c) {
             for (int f = 0; f < oclust_reduced_size; ++f) {
+              // (Z_filters + (ic * oclust + oc) * Z_filter_flat_size)[INDEX_4D(Z_filter_shape_hwcn, i, j, c, f)] = z_filter_data[INDEX_6D(z_filter_shape, f, i, j, c, ic, oc)];
               (Z_filters + (ic * oclust + oc) * Z_filter_flat_size)[INDEX_4D(Z_filter_shape, f, i, j, c)] = z_filter_data[INDEX_6D(z_filter_shape, f, i, j, c, ic, oc)];
             }
           }
@@ -319,6 +337,16 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
     }
   }
 
+  float *Z_filters_transposed;
+  Z_filters_transposed = (float *)calloc(cluster_pairs * Z_filter_flat_size, sizeof(float));
+
+  for (int ic = 0; ic < iclust; ++ic) {
+    for (int oc = 0; oc < oclust; ++oc) {
+      TransposeFloatArray((Z_filters + (ic * oclust + oc) * Z_filter_flat_size), (Z_filters_transposed + (ic * oclust + oc) * Z_filter_flat_size), Z_filter_shape.Dims(0), Z_filter_shape.Dims(1) * Z_filter_shape.Dims(2) * Z_filter_shape.Dims(3));
+    }
+  }
+
+
 #if 1
   for (int ic = 0; ic < iclust; ++ic) {
     for (int oc = 0; oc < oclust; ++oc) {
@@ -326,7 +354,8 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
           *eigen_support::GetThreadPoolDevice(context),
           op_params,
           C_output_shape, (const float *)(C_outputs + (ic * oclust + oc) * C_output_flat_size),
-          Z_filter_shape, (const float *)(Z_filters + (ic * oclust + oc) * Z_filter_flat_size),
+          Z_filter_shape, (const float *)(Z_filters_transposed + (ic * oclust + oc) * Z_filter_flat_size),
+          // Z_filter_shape, (const float *)(Z_filters + (ic * oclust + oc) * Z_filter_flat_size),
           null_tensor_shape, null_tensor_data,
           Z_output_shape, (float *)(Z_outputs + (ic * oclust + oc) * Z_output_flat_size),
           null_tensor_shape, null_tensor_data);
@@ -336,6 +365,7 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
 
   free(C_outputs);
   free(Z_filters);
+  free(Z_filters_transposed);
 
   // Phase F
   op_params.padding_type = PaddingType::kNone;
@@ -367,6 +397,15 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
     }
   }
 
+  float *F_filters_transposed;
+  F_filters_transposed = (float *)calloc(cluster_pairs * F_filter_flat_size, sizeof(float));
+
+  for (int ic = 0; ic < iclust; ++ic) {
+    for (int oc = 0; oc < oclust; ++oc) {
+      TransposeFloatArray((F_filters + (ic * oclust + oc) * F_filter_flat_size), (F_filters_transposed + (ic * oclust + oc) * F_filter_flat_size), F_filter_shape.Dims(0), F_filter_shape.Dims(1) * F_filter_shape.Dims(2) * F_filter_shape.Dims(3));
+    }
+  }
+
 #if 1
   for (int ic = 0; ic < iclust; ++ic) {
     for (int oc = 0; oc < oclust; ++oc) {
@@ -374,7 +413,8 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
           *eigen_support::GetThreadPoolDevice(context),
           op_params,
           Z_output_shape, (const float *)(Z_outputs + (ic * oclust + oc) * Z_output_flat_size),
-          F_filter_shape, (const float *)(F_filters + (ic * oclust + oc) * F_filter_flat_size),
+          // F_filter_shape, (const float *)(F_filters + (ic * oclust + oc) * F_filter_flat_size),
+          F_filter_shape, (const float *)(F_filters_transposed + (ic * oclust + oc) * F_filter_flat_size),
           null_tensor_shape, null_tensor_data,
           F_output_shape, (float *)(F_outputs + (ic * oclust + oc) * F_output_flat_size),
           null_tensor_shape, null_tensor_data);
@@ -384,10 +424,7 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
 
   free(Z_outputs);
   free(F_filters);
-
-  for (int i = 0; i < F_output_flat_size * cluster_pairs; ++i) {
-    printf("%f\n", F_outputs[i]);
-  }
+  free(F_filters_transposed);
 
 	int count = output_shape.FlatSize();
 	for (int i = 0; i < count; ++i) {
@@ -400,7 +437,8 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
         for (int j = 0; j < output_width; ++j) {
           for (int c = 0; c < oclust_size; ++c) {
             int dest_channel = oclusters_data[INDEX_2D(oclusters_shape, oc, c)];
-            output_data[INDEX_4D(output_shape, 0, i, j, dest_channel)] += (F_outputs + (ic * oclust + oc) * F_output_flat_size)[INDEX_4D(Z_output_shape, 0, i, j, c)];
+            // printf("%d destination: %d\n", c, dest_channel);
+            output_data[INDEX_4D(output_shape, 0, i, j, dest_channel)] += (F_outputs + (ic * oclust + oc) * F_output_flat_size)[INDEX_4D(F_output_shape, 0, i, j, c)];
           }
         }
       }
@@ -408,6 +446,18 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   }
 
   free(F_outputs);
+
+#if 0
+  for (int i = 0; i < output_shape.FlatSize(); ++i) {
+    printf("%f\n", output_data[i]);
+  }
+#endif
+
+#if 0
+for (int i = 0; i < bias_shape.FlatSize(); ++i) {
+  printf("bias %d of %d == %f\n", i, bias_shape.FlatSize(), bias_data[i]);
+}
+#endif
 
 #if 1
   optimized_ops::AddBiasAndEvalActivationFunction(
