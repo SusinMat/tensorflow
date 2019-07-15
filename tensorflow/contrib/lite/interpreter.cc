@@ -787,7 +787,9 @@ TfLiteStatus Interpreter::Invoke(const std::string profiler_file_name) {
                     (stop - start);
     measure.execution_time = duration;
 
-    Profiler::get().addKernelMeasure(measure);
+    if (measure.name != "Dragunov") {
+      Profiler::get().addKernelMeasure(measure);
+    }
   }
 
   Profiler::get().endInferenceMeasure();

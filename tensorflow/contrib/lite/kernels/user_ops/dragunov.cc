@@ -8,6 +8,9 @@
 #include "tensorflow/contrib/lite/kernels/user_ops/user_ops.h"
 #include "tensorflow/contrib/lite/model.h"
 
+#include "tensorflow/contrib/lite/profiler.h"
+#include <chrono>
+
 #include "flatbuffers/flexbuffers.h" // TF:flatbuffers
 
 namespace tflite {
@@ -28,7 +31,8 @@ namespace dragunov {
 #define INDEX_5D(shape, i, j, k, l, m)    (i * DIM1(shape) * DIM2(shape) * DIM3(shape) * DIM4(shape) + j * DIM2(shape) * DIM3(shape) * DIM4(shape) + k * DIM3(shape) * DIM4(shape) + l * DIM4(shape) + m)
 #define INDEX_6D(shape, i, j, k, l, m, n) (i * DIM1(shape) * DIM2(shape) * DIM3(shape) * DIM4(shape) * DIM5(shape) + j * DIM2(shape) * DIM3(shape) * DIM4(shape) * DIM5(shape) + k * DIM3(shape) * DIM4(shape) * DIM5(shape) + l * DIM4(shape) * DIM5(shape) + m * DIM5(shape) + n)
 
-struct TfLiteDragunovParams {
+struct TfLiteDragunovParams
+{
   int stride_h;
   int stride_w;
   TfLitePadding padding_type;
@@ -56,7 +60,8 @@ constexpr int OCLUSTERS_TENSOR = 5;
 constexpr int BIAS_TENSOR = 6;
 constexpr int OUTPUT_TENSOR = 0;
 
-inline PaddingType RuntimePaddingType(TfLitePadding padding_type) {
+inline PaddingType RuntimePaddingType(TfLitePadding padding_type)
+{
   switch (padding_type) {
     case TfLitePadding::kTfLitePaddingSame:
       return PaddingType::kSame;
@@ -68,7 +73,8 @@ inline PaddingType RuntimePaddingType(TfLitePadding padding_type) {
   }
 }
 
-void *Init(TfLiteContext *context, const char *buffer, size_t length) {
+void *Init(TfLiteContext *context, const char *buffer, size_t length)
+{
   struct TfLiteDragunovParams *data = new struct TfLiteDragunovParams;
 
   const uint8_t *buffer_t = reinterpret_cast<const uint8_t *>(buffer);
@@ -82,7 +88,8 @@ void *Init(TfLiteContext *context, const char *buffer, size_t length) {
   return data;
 }
 
-void Free(TfLiteContext *context, void *buffer) {
+void Free(TfLiteContext *context, void *buffer)
+{
   free(reinterpret_cast<struct TfLiteDragunovParams *>(buffer)->sliced_input);
   free(reinterpret_cast<struct TfLiteDragunovParams *>(buffer)->C_filters);
   free(reinterpret_cast<struct TfLiteDragunovParams *>(buffer)->C_outputs);
@@ -96,7 +103,8 @@ void Free(TfLiteContext *context, void *buffer) {
   return;
 }
 
-void TransposeFloatArray(float *input_data, float *output_data, int rows, int cols) {
+void TransposeFloatArray(float *input_data, float *output_data, int rows, int cols)
+{
   for (int i = 0; i < rows; ++i) {
     for (int j = 0; j < cols; ++j) {
       const float in_value = input_data[i * cols + j];
@@ -167,8 +175,8 @@ TfLiteStatus Prepare(TfLiteContext *context, TfLiteNode *node)
   const int filter_height       = z_filter_shape.Dims(1);
   const int filter_width        = z_filter_shape.Dims(2);
   const int output_depth        = oclust * oclust_size;
-  int output_height = -1;
-  int output_width = -1;
+  int output_height             = -1;
+  int output_width              = -1;
 
   TF_LITE_ENSURE_EQ(context, input->type, output->type);
   if (params->padding_type == kTfLitePaddingSame) {
@@ -257,8 +265,20 @@ TfLiteStatus Prepare(TfLiteContext *context, TfLiteNode *node)
   return retval;
 }
 
+std::chrono::system_clock::time_point CurrentTime()
+{
+  return std::chrono::system_clock::now();
+}
+
+inline std::chrono::milliseconds::rep TimePointInMilliseconds(std::chrono::system_clock::time_point timepoint)
+{
+  return std::chrono::duration_cast<std::chrono::milliseconds>(timepoint.time_since_epoch()).count();
+}
+
 TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
 {
+  std::chrono::system_clock::time_point start, stop;
+  Profiler::KernelExecutionMeasure slicing, phase_C, phase_Z, phase_F, sum, bias_relu;
   struct TfLiteDragunovParams *params = reinterpret_cast<TfLiteDragunovParams *>(node->user_data);
 	const TfLiteTensor *input = GetInput(context, node, INPUT_TENSOR);
 	const TfLiteTensor *iclusters = GetInput(context, node, ICLUSTERS_TENSOR);
@@ -360,6 +380,10 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
 #endif
 
   // Phase C
+  phase_C.name = "Dragunov_Phase_C";
+  start = CurrentTime();
+  phase_C.start_clock = TimePointInMilliseconds(start);
+
   // im2col not required yet, unless (stride_h, stride_w) != (1, 1)
   op_params.padding_type = PaddingType::kNone;
   op_params.padding_values.height = 0;
@@ -393,7 +417,17 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
     }
   }
 
+  stop = CurrentTime();
+  phase_C.stop_clock = TimePointInMilliseconds(stop);
+  phase_C.execution_time = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+
+  Profiler::get().addKernelMeasure(phase_C);
+
   // Phase Z
+  phase_Z.name = "Dragunov_Phase_Z";
+  start = CurrentTime();
+  phase_Z.start_clock = TimePointInMilliseconds(start);
+
   op_params.padding_type = RuntimePaddingType(params->padding_type);
   op_params.padding_values.height = params->padding_values.height;
   op_params.padding_values.width = params->padding_values.width;
@@ -403,7 +437,6 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   op_params.dilation_width_factor = dilation_width_factor;
   op_params.float_activation_min = output_activation_min;
   op_params.float_activation_max = output_activation_max;
-
 
   for (int ic = 0; ic < iclust; ++ic) {
     for (int oc = 0; oc < oclust; ++oc) {
@@ -418,7 +451,16 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
     }
   }
 
+  stop = CurrentTime();
+  phase_Z.stop_clock = TimePointInMilliseconds(stop);
+  phase_Z.execution_time = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+  Profiler::get().addKernelMeasure(phase_Z);
+
   // Phase F
+  phase_F.name = "Dragunov_Phase_F";
+  start = CurrentTime();
+  phase_F.start_clock = TimePointInMilliseconds(start);
+
   op_params.padding_type = PaddingType::kNone;
   op_params.padding_values.height = 0;
   op_params.padding_values.width = 0;
@@ -450,18 +492,22 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
         for (int j = 0; j < output_width; ++j) {
           for (int c = 0; c < oclust_size; ++c) {
             int dest_channel = oclusters_data[INDEX_2D(oclusters_shape, oc, c)];
-            output_data[INDEX_4D(output_shape, 0, i, j, dest_channel)] += (F_outputs + (ic * oclust + oc) * F_output_flat_size)[INDEX_4D(F_output_shape, 0, i, j, c)];
+             output_data[INDEX_4D(output_shape, 0, i, j, dest_channel)] += (F_outputs + (ic * oclust + oc) * F_output_flat_size)[INDEX_4D(F_output_shape, 0, i, j, c)];
           }
         }
       }
     }
   }
 
-
   optimized_ops::AddBiasAndEvalActivationFunction(
       output_activation_min, output_activation_max,
       bias_shape, bias_data,
       output_shape, output_data);
+
+  stop = CurrentTime();
+  phase_F.stop_clock = TimePointInMilliseconds(stop);
+  phase_F.execution_time = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+  Profiler::get().addKernelMeasure(phase_F);
 
 	return kTfLiteOk;
 }
