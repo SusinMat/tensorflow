@@ -379,20 +379,12 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   printf("\n");
 #endif
 
-  // Phase C
-  phase_C.name = "Dragunov_Phase_C";
+  // Slicing
+  slicing.name = "Dragunov_Slicing";
   start = CurrentTime();
-  phase_C.start_clock = TimePointInMilliseconds(start);
+  slicing.start_clock = TimePointInMilliseconds(start);
 
   // im2col not required yet, unless (stride_h, stride_w) != (1, 1)
-  op_params.padding_type = PaddingType::kNone;
-  op_params.padding_values.height = 0;
-  op_params.padding_values.width = 0;
-  op_params.stride_height = 1;
-  op_params.stride_width = 1;
-  op_params.dilation_height_factor = dilation_height_factor;
-  op_params.dilation_width_factor = dilation_width_factor;
-
   for (int ic = 0; ic < iclust; ++ic) {
     for (int i = 0; i < input_height; ++i) {
       for (int j = 0; j < input_width; ++j) {
@@ -403,6 +395,25 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
       }
     }
   }
+
+  stop = CurrentTime();
+  slicing.stop_clock = TimePointInMilliseconds(stop);
+  slicing.execution_time = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+
+  Profiler::get().addKernelMeasure(slicing);
+
+  // Phase C
+  phase_C.name = "Dragunov_Phase_C";
+  start = CurrentTime();
+  phase_C.start_clock = TimePointInMilliseconds(start);
+
+  op_params.padding_type = PaddingType::kNone;
+  op_params.padding_values.height = 0;
+  op_params.padding_values.width = 0;
+  op_params.stride_height = 1;
+  op_params.stride_width = 1;
+  op_params.dilation_height_factor = dilation_height_factor;
+  op_params.dilation_width_factor = dilation_width_factor;
 
   for (int ic = 0; ic < iclust; ++ic) {
     for (int oc = 0; oc < oclust; ++oc) {
@@ -482,6 +493,16 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
     }
   }
 
+  stop = CurrentTime();
+  phase_F.stop_clock = TimePointInMilliseconds(stop);
+  phase_F.execution_time = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+  Profiler::get().addKernelMeasure(phase_F);
+
+  // Sum
+  sum.name = "Dragunov_Sum";
+  start = CurrentTime();
+  sum.start_clock = TimePointInMilliseconds(start);
+
 	for (int i = 0; i < output_flat_size; ++i) {
 		output_data[i] = 0.0f;
 	}
@@ -499,15 +520,25 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
     }
   }
 
+  stop = CurrentTime();
+  sum.stop_clock = TimePointInMilliseconds(stop);
+  sum.execution_time = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+  Profiler::get().addKernelMeasure(sum);
+
+  // Bias + RELU
+  bias_relu.name = "Dragunov_Bias_RELU";
+  start = CurrentTime();
+  bias_relu.start_clock = TimePointInMilliseconds(start);
+
   optimized_ops::AddBiasAndEvalActivationFunction(
       output_activation_min, output_activation_max,
       bias_shape, bias_data,
       output_shape, output_data);
 
   stop = CurrentTime();
-  phase_F.stop_clock = TimePointInMilliseconds(stop);
-  phase_F.execution_time = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-  Profiler::get().addKernelMeasure(phase_F);
+  bias_relu.stop_clock = TimePointInMilliseconds(stop);
+  bias_relu.execution_time = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+  Profiler::get().addKernelMeasure(bias_relu);
 
 	return kTfLiteOk;
 }
