@@ -503,9 +503,13 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   start = CurrentTime();
   sum.start_clock = TimePointInMilliseconds(start);
 
+#if 0
 	for (int i = 0; i < output_flat_size; ++i) {
 		output_data[i] = 0.0f;
 	}
+#else
+  memset(output_data, 0x0, output_flat_size * (sizeof *output_data));
+#endif
 
   for (int ic = 0; ic < iclust; ++ic) {
     for (int oc = 0; oc < oclust; ++oc) {
