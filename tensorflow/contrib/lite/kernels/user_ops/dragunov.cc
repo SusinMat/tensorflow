@@ -118,6 +118,7 @@ TfLiteStatus Prepare(TfLiteContext *context, TfLiteNode *node)
   // TODO: 53 out of 94 conv in inception_v3 need im2col
   struct TfLiteDragunovParams *params = reinterpret_cast<TfLiteDragunovParams *>(node->user_data);
 
+#ifdef DEBUG_DRAGUNOV
   printf("Strides [h, w]: [%d, %d]\n", params->stride_h, params->stride_w);
   printf("Padding type: ");
 
@@ -135,6 +136,7 @@ TfLiteStatus Prepare(TfLiteContext *context, TfLiteNode *node)
       printf("ERROR(%d)\n", params->padding_type);
       break;
   }
+#endif
 
 	TF_LITE_ENSURE_EQ(context, NumInputs(node), 7);
 	TF_LITE_ENSURE_EQ(context, NumOutputs(node), 1);
@@ -360,7 +362,7 @@ TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node)
   float output_activation_min, output_activation_max;
   CalculateActivationRange(params->activation, &output_activation_min, &output_activation_max);
 
-#if 0
+#ifdef DEBUG_DRAGUNOV
   printf("iclust = %d ; oclust = %d\n", iclust, oclust);
 
   printf("C filter: ");
